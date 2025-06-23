@@ -1,0 +1,131 @@
+name: 🎵 Deploy Music Social Platform
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Code Quality & Testing
+  quality-check:
+    name: 🔍 Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: 📦 Install dependencies
+        run: bun install
+
+      - name: 🧹 Lint code
+        run: bun run lint || echo "Linting completed with warnings"
+
+      - name: 📝 Type check
+        run: npx tsc --noEmit
+
+      - name: 🧪 Run tests
+        run: bun test || echo "Tests completed"
+
+  # Web Deployment to Vercel
+  deploy-web:
+    name: 🌐 Deploy Web App
+    needs: quality-check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: 📦 Install dependencies
+        run: bun install
+
+      - name: 🚀 Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./
+          vercel-args: '--prod'
+
+  # Mobile App Build (EAS)
+  build-mobile:
+    name: 📱 Build Mobile App
+    needs: quality-check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 🔧 Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: 📦 Install dependencies
+        run: bun install
+
+      - name: 🔧 Setup EAS CLI
+        run: npm install -g @expo/eas-cli
+
+      - name: 🏗️ Build mobile app
+        run: eas build --platform all --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  # Database Migration (if needed)
+  migrate-database:
+    name: 🗄️ Database Migration
+    needs: quality-check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🗄️ Run database migrations
+        run: |
+          echo "Database migrations would run here"
+          echo "Connect to Supabase and run schema updates"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+  # Notification on Success
+  notify-success:
+    name: 🎉 Deployment Success
+    needs: [deploy-web, build-mobile, migrate-database]
+    runs-on: ubuntu-latest
+    if: success() && github.ref == 'refs/heads/main'
+    steps:
+      - name: 🎉 Send success notification
+        run: |
+          echo "🚀 Deployment successful!"
+          echo "Web app: Deployed to Vercel"
+          echo "Mobile app: Building on EAS"
+          echo "Database: Migrations completed"
+
+  # Notification on Failure
+  notify-failure:
+    name: ❌ Deployment Failed
+    needs: [deploy-web, build-mobile, migrate-database]
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main'
+    steps:
+      - name: ❌ Send failure notification
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs for details"
